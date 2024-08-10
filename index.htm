@@ -65,7 +65,7 @@
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas" width="360" height="627"></canvas>
     <div id="scoreboard">Score: <span id="score">0</span></div>
     <div id="gameOver">
         Game Over!<br>
@@ -78,7 +78,6 @@
     <div id="aimJoystick" class="joystick">
         <div class="joystickKnob"></div>
     </div>
-
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -95,7 +94,10 @@
         canvas.height = window.innerHeight;
 
         let enemyImage = new Image();
-        enemyImage.src = 'https://i.imgur.com/iLm0hS5.png'; // Replace with your image path
+        enemyImage.src = 'https://i.imgur.com/iLm0hS5.png';
+
+        let bulletImage = new Image();
+        bulletImage.src = 'https://i.imgur.com/zOtCrxD.png'; // Replace with your bullet image path
 
         let player = {
             x: canvas.width / 2,
@@ -120,7 +122,7 @@
         function createEnemy() {
             let x = Math.random() * canvas.width;
             let y = Math.random() < 0.5 ? 0 : canvas.height;
-            let radius = 20; // Adjust this to half the width/height of your image
+            let radius = 20;
             let speed = 2 * difficulty;
             enemies.push({x, y, radius, speed});
         }
@@ -132,11 +134,10 @@
             ctx.fill();
             ctx.closePath();
 
-            // Draw player name "Students" above the circle
             ctx.font = '20px Arial';
             ctx.fillStyle = 'white';
             ctx.textAlign = 'center';
-            ctx.fillText('Students', player.x, player.y - player.radius - 10);
+            ctx.fillText('জনগণ', player.x, player.y - player.radius - 10);
         }
 
         function drawEnemies() {
@@ -147,11 +148,7 @@
 
         function drawBullets() {
             bullets.forEach(bullet => {
-                ctx.beginPath();
-                ctx.arc(bullet.x, bullet.y, 5, 0, Math.PI * 2);
-                ctx.fillStyle = 'yellow';
-                ctx.fill();
-                ctx.closePath();
+                ctx.drawImage(bulletImage, bullet.x - bullet.width/2, bullet.y - bullet.height/2, bullet.width, bullet.height);
             });
         }
 
@@ -187,11 +184,10 @@
         function checkCollisions() {
             enemies.forEach((enemy, enemyIndex) => {
                 bullets.forEach((bullet, bulletIndex) => {
-                    let dx = enemy.x - bullet.x;
-                    let dy = enemy.y - bullet.y;
-                    let distance = Math.sqrt(dx * dx + dy * dy);
-
-                    if (distance < enemy.radius + 5) {
+                    if (bullet.x < enemy.x + enemy.radius &&
+                        bullet.x + bullet.width > enemy.x - enemy.radius &&
+                        bullet.y < enemy.y + enemy.radius &&
+                        bullet.y + bullet.height > enemy.y - enemy.radius) {
                         enemies.splice(enemyIndex, 1);
                         bullets.splice(bulletIndex, 1);
                         score += 10;
@@ -222,7 +218,9 @@
                 x: player.x,
                 y: player.y,
                 dx: aimJoystickData.x * 10,
-                dy: aimJoystickData.y * 10
+                dy: aimJoystickData.y * 10,
+                width: 40,  // Increased bullet size
+                height: 20  // Increased bullet size
             };
             bullets.push(bullet);
         }
@@ -361,10 +359,17 @@
             player.y = canvas.height / 2;
         });
 
-        enemyImage.onload = function() {
-            setInterval(createEnemy, 2000);
-            gameLoop();
-        };
+        let imagesLoaded = 0;
+        function imageLoaded() {
+            imagesLoaded++;
+            if (imagesLoaded === 2) {
+                setInterval(createEnemy, 2000);
+                gameLoop();
+            }
+        }
+
+        enemyImage.onload = imageLoaded;
+        bulletImage.onload = imageLoaded;
     </script>
 </body>
 </html>
