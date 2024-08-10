@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Hasina Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+            touch-action: none;
+        }
+        #gameCanvas {
+            display: block;
+        }
+        #scoreboard {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+        }
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 40px;
+            text-align: center;
+            display: none;
+        }
+        #restartButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        .joystick {
+            position: absolute;
+            bottom: 20px;
+            width: 100px;
+            height: 100px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+        }
+        #moveJoystick {
+            left: 20px;
+        }
+        #aimJoystick {
+            right: 20px;
+        }
+        .joystickKnob {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="scoreboard">Score: <span id="score">0</span></div>
+    <div id="gameOver">
+        Game Over!<br>
+        Final Score: <span id="finalScore">0</span><br>
+        <button id="restartButton">Restart</button>
+    </div>
+    <div id="moveJoystick" class="joystick">
+        <div class="joystickKnob"></div>
+    </div>
+    <div id="aimJoystick" class="joystick">
+        <div class="joystickKnob"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const gameOverElement = document.getElementById('gameOver');
+        const finalScoreElement = document.getElementById('finalScore');
+        const restartButton = document.getElementById('restartButton');
+        const moveJoystick = document.getElementById('moveJoystick');
+        const aimJoystick = document.getElementById('aimJoystick');
+        const moveKnob = moveJoystick.querySelector('.joystickKnob');
+        const aimKnob = aimJoystick.querySelector('.joystickKnob');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let enemyImage = new Image();
+        enemyImage.src = 'https://i.imgur.com/PAfo4gX.png'; // Replace with your image path
+
+        let player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 20,
+            color: 'blue',
+            speed: 5
+        };
+
+        let enemies = [];
+        let bullets = [];
+        let score = 0;
+        let gameIsOver = false;
+        let difficulty = 1;
+        let lastDifficultyIncrease = Date.now();
+        let isFiring = false;
+        let lastBulletTime = 0;
+        let bulletCooldown = 100;
+        let moveJoystickData = { x: 0, y: 0 };
+        let aimJoystickData = { x: 0, y: 0 };
+
+        function createEnemy() {
+            let x = Math.random() * canvas.width;
+            let y = Math.random() < 0.5 ? 0 : canvas.height;
+            let radius = 20; // Adjust this to half the width/height of your image
+            let speed = 2 * difficulty;
+            enemies.push({x, y, radius, speed});
+        }
+
+        function drawPlayer() {
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fillStyle = player.color;
+            ctx.fill();
+            ctx.closePath();
+
+            // Draw player name "Students" above the circle
+            ctx.font = '20px Arial';
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.fillText('Students', player.x, player.y - player.radius - 10);
+        }
+
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                ctx.drawImage(enemyImage, enemy.x - enemy.radius, enemy.y - enemy.radius, enemy.radius * 2, enemy.radius * 2);
+            });
+        }
+
+        function drawBullets() {
+            bullets.forEach(bullet => {
+                ctx.beginPath();
+                ctx.arc(bullet.x, bullet.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = 'yellow';
+                ctx.fill();
+                ctx.closePath();
+            });
+        }
+
+        function movePlayer() {
+            player.x += moveJoystickData.x * player.speed;
+            player.y += moveJoystickData.y * player.speed;
+
+            player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+        }
+
+        function moveEnemies() {
+            enemies.forEach(enemy => {
+                let dx = player.x - enemy.x;
+                let dy = player.y - enemy.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                enemy.x += (dx / distance) * enemy.speed;
+                enemy.y += (dy / distance) * enemy.speed;
+            });
+        }
+
+        function moveBullets() {
+            bullets.forEach((bullet, index) => {
+                bullet.x += bullet.dx;
+                bullet.y += bullet.dy;
+
+                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                    bullets.splice(index, 1);
+                }
+            });
+        }
+
+        function checkCollisions() {
+            enemies.forEach((enemy, enemyIndex) => {
+                bullets.forEach((bullet, bulletIndex) => {
+                    let dx = enemy.x - bullet.x;
+                    let dy = enemy.y - bullet.y;
+                    let distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < enemy.radius + 5) {
+                        enemies.splice(enemyIndex, 1);
+                        bullets.splice(bulletIndex, 1);
+                        score += 10;
+                        scoreElement.textContent = score;
+                    }
+                });
+
+                let playerDx = player.x - enemy.x;
+                let playerDy = player.y - enemy.y;
+                let playerDistance = Math.sqrt(playerDx * playerDx + playerDy * playerDy);
+
+                if (playerDistance < player.radius + enemy.radius) {
+                    gameOver();
+                }
+            });
+        }
+
+        function increaseDifficulty() {
+            const now = Date.now();
+            if (now - lastDifficultyIncrease > 5000) {
+                difficulty += 0.5;
+                lastDifficultyIncrease = now;
+            }
+        }
+
+        function createBullet() {
+            let bullet = {
+                x: player.x,
+                y: player.y,
+                dx: aimJoystickData.x * 10,
+                dy: aimJoystickData.y * 10
+            };
+            bullets.push(bullet);
+        }
+
+        function gameLoop() {
+            if (gameIsOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            movePlayer();
+            drawPlayer();
+            drawEnemies();
+            drawBullets();
+
+            moveEnemies();
+            moveBullets();
+            checkCollisions();
+            increaseDifficulty();
+
+            if (isFiring && (aimJoystickData.x !== 0 || aimJoystickData.y !== 0)) {
+                const now = Date.now();
+                if (now - lastBulletTime > bulletCooldown) {
+                    createBullet();
+                    lastBulletTime = now;
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function gameOver() {
+            gameIsOver = true;
+            gameOverElement.style.display = 'block';
+            finalScoreElement.textContent = score;
+        }
+
+        function restartGame() {
+            gameIsOver = false;
+            score = 0;
+            enemies = [];
+            bullets = [];
+            difficulty = 1;
+            lastDifficultyIncrease = Date.now();
+            scoreElement.textContent = '0';
+            gameOverElement.style.display = 'none';
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            gameLoop();
+        }
+
+        function handleJoystick(event, joystick, knob, joystickData) {
+            const joystickRect = joystick.getBoundingClientRect();
+            const centerX = joystickRect.width / 2;
+            const centerY = joystickRect.height / 2;
+            
+            let inputX, inputY;
+            if (event.touches) {
+                const touch = Array.from(event.touches).find(t => {
+                    const x = t.clientX - joystickRect.left;
+                    const y = t.clientY - joystickRect.top;
+                    return x >= 0 && x <= joystickRect.width && y >= 0 && y <= joystickRect.height;
+                });
+                
+                if (touch) {
+                    inputX = touch.clientX - joystickRect.left;
+                    inputY = touch.clientY - joystickRect.top;
+                } else {
+                    return;
+                }
+            } else {
+                inputX = event.clientX - joystickRect.left;
+                inputY = event.clientY - joystickRect.top;
+            }
+
+            const dx = inputX - centerX;
+            const dy = inputY - centerY;
+            const distance = Math.min(joystickRect.width / 2, Math.sqrt(dx * dx + dy * dy));
+            const angle = Math.atan2(dy, dx);
+
+            joystickData.x = (distance / (joystickRect.width / 2)) * Math.cos(angle);
+            joystickData.y = (distance / (joystickRect.height / 2)) * Math.sin(angle);
+
+            const knobX = centerX + joystickData.x * (joystickRect.width / 2 - knob.offsetWidth / 2);
+            const knobY = centerY + joystickData.y * (joystickRect.height / 2 - knob.offsetHeight / 2);
+
+            knob.style.left = `${knobX}px`;
+            knob.style.top = `${knobY}px`;
+
+            if (joystick === aimJoystick) {
+                isFiring = true;
+            }
+        }
+
+        function resetJoystick(joystick, knob, joystickData) {
+            joystickData.x = 0;
+            joystickData.y = 0;
+            knob.style.left = '50%';
+            knob.style.top = '50%';
+
+            if (joystick === aimJoystick) {
+                isFiring = false;
+            }
+        }
+
+        function handleTouchStart(e) {
+            handleJoystick(e, moveJoystick, moveKnob, moveJoystickData);
+            handleJoystick(e, aimJoystick, aimKnob, aimJoystickData);
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            handleJoystick(e, moveJoystick, moveKnob, moveJoystickData);
+            handleJoystick(e, aimJoystick, aimKnob, aimJoystickData);
+        }
+
+        function handleTouchEnd(e) {
+            if (e.touches.length === 0) {
+                resetJoystick(moveJoystick, moveKnob, moveJoystickData);
+                resetJoystick(aimJoystick, aimKnob, aimJoystickData);
+            } else {
+                handleJoystick(e, moveJoystick, moveKnob, moveJoystickData);
+                handleJoystick(e, aimJoystick, aimKnob, aimJoystickData);
+            }
+        }
+
+        document.addEventListener('touchstart', handleTouchStart, { passive: false });
+        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+        document.addEventListener('touchend', handleTouchEnd);
+
+        restartButton.addEventListener('click', restartGame);
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+        });
+
+        enemyImage.onload = function() {
+            setInterval(createEnemy, 2000);
+            gameLoop();
+        };
+    </script>
+</body>
+</html>
